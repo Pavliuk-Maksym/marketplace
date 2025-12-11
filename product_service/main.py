@@ -1,0 +1,1 @@
+print("Hello from kostya in product_service")
