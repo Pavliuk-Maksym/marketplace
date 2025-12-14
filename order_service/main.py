@@ -61,7 +61,18 @@ def find_order_by_id(id: int):
 
 @router.post("")
 def create_order(order: dict):
-    pass
+    new_id = max([o["id"] for o in orders], default=0) + 1
+
+    new_order = {
+        "id": new_id,
+        "buyerId": order.get("buyerId"),
+        "productId": order.get("productId"),
+        "status": "pending",
+    }
+
+    orders.append(new_order)
+
+    return new_order
 
 
 @router.put("/{id}/{status}")
