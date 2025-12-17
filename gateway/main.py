@@ -24,7 +24,6 @@ async def proxy(service: str, path: str, request: Request):
     instances = resp.json()
     instance = pick_instance(service, instances)
 
-    # Правильная сборка URL
     target_url = f"http://{instance['host']}:{instance['port']}/{service}"
     if path:
         target_url += f"/{path}"

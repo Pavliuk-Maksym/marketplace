@@ -6,7 +6,6 @@ from typing import List, Dict
 app = FastAPI()
 router = APIRouter(prefix="/users")
 
-# ====== BUSINESS LOGIC (оставлено без изменений) ======
 users: List[Dict] = [
     {
         "id": 1,
@@ -66,14 +65,12 @@ def delete_user(id: int):
 
 app.include_router(router)
 
-# ====== DISCOVERY CONFIG ======
 SERVICE_NAME = "users"
 SERVICE_HOST = "localhost"
 SERVICE_PORT = 8003
 DISCOVERY_URL = "http://localhost:8000"
 
 
-# ====== REGISTRATION И HEARTBEAT ======
 async def register():
     async with httpx.AsyncClient() as client:
         await client.post(
@@ -101,13 +98,11 @@ async def startup():
     asyncio.create_task(heartbeat())
 
 
-# ====== HEALTHCHECK ======
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-# ====== HELPER ДЛЯ ВЫЗОВА ДРУГИХ СЕРВИСОВ ПО ЛОГИЧЕСКОМУ ИМЕНИ ======
 async def call_service(
     service_name: str, path: str, method="GET", json=None, params=None
 ):
@@ -117,7 +112,7 @@ async def call_service(
         instances = resp.json()
         if not instances:
             raise Exception(f"No alive instances for service {service_name}")
-        instance = instances[0]  # round-robin можно улучшить
+        instance = instances[0]
         url = f"http://{instance['host']}:{instance['port']}/{service_name}/{path}"
         response = await client.request(method, url, json=json, params=params)
         response.raise_for_status()

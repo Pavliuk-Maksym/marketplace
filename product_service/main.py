@@ -7,7 +7,6 @@ import httpx
 app = FastAPI()
 
 
-# ====== BUSINESS LOGIC (оставлено без изменений) ======
 class ProductBase(BaseModel):
     ownerId: int
     title: str
@@ -91,14 +90,12 @@ def delete_product(product_id: int):
     raise HTTPException(status_code=404, detail="Product not found")
 
 
-# ====== DISCOVERY CONFIG ======
 SERVICE_NAME = "products"
 SERVICE_HOST = "localhost"
 SERVICE_PORT = 8001
 DISCOVERY_URL = "http://localhost:8000"
 
 
-# ====== REGISTRATION И HEARTBEAT ======
 async def register():
     async with httpx.AsyncClient() as client:
         await client.post(
@@ -126,13 +123,11 @@ async def startup():
     asyncio.create_task(heartbeat())
 
 
-# ====== HEALTHCHECK ======
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-# ====== HELPER ДЛЯ ВЫЗОВА ДРУГИХ СЕРВИСОВ ПО ЛОГИЧЕСКОМУ ИМЕНИ ======
 async def call_service(
     service_name: str, path: str, method="GET", json=None, params=None
 ):

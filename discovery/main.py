@@ -5,32 +5,24 @@ import asyncio
 
 app = FastAPI(title="Service Discovery")
 
-# ====== CONFIG ======
-HEARTBEAT_TIMEOUT = 15  # seconds
-CLEANUP_INTERVAL = 5  # seconds
 
-# ====== REGISTRY ======
-# {
-#   "users": [
-#       {"host": "localhost", "port": 8001, "last_heartbeat": datetime}
-#   ]
-# }
+HEARTBEAT_TIMEOUT = 15
+CLEANUP_INTERVAL = 5
+
+
 registry: Dict[str, List[dict]] = {}
 
 
-# ====== MODELS (internal) ======
 def is_alive(service: dict) -> bool:
     return datetime.utcnow() - service["last_heartbeat"] < timedelta(
         seconds=HEARTBEAT_TIMEOUT
     )
 
 
-# ====== API ======
 @app.post("/register")
 def register(name: str, host: str, port: int):
     services = registry.setdefault(name, [])
 
-    # не регистрируем дубликаты
     for s in services:
         if s["host"] == host and s["port"] == port:
             s["last_heartbeat"] = datetime.utcnow()
@@ -73,7 +65,6 @@ def list_services():
     return registry
 
 
-# ====== BACKGROUND CLEANUP ======
 async def cleanup_task():
     while True:
         for name in list(registry.keys()):

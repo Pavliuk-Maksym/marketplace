@@ -5,7 +5,7 @@ import httpx
 app = FastAPI()
 router = APIRouter(prefix="/orders")
 
-# ====== BUSINESS LOGIC (оставлено без изменений) ======
+
 orders = [
     {"id": 1, "buyerId": 1, "productId": 1, "status": "pending"},
     {"id": 6, "buyerId": 1, "productId": 2, "status": "pending"},
@@ -62,14 +62,13 @@ def cancel_order(id: int):
 
 app.include_router(router)
 
-# ====== DISCOVERY CONFIG ======
+
 SERVICE_NAME = "orders"
 SERVICE_HOST = "localhost"
 SERVICE_PORT = 8002
 DISCOVERY_URL = "http://localhost:8000"
 
 
-# ====== REGISTRATION И HEARTBEAT ======
 async def register():
     async with httpx.AsyncClient() as client:
         await client.post(
@@ -97,13 +96,11 @@ async def startup():
     asyncio.create_task(heartbeat())
 
 
-# ====== HEALTHCHECK ======
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-# ====== HELPER ДЛЯ ВЫЗОВА ДРУГИХ СЕРВИСОВ ПО ЛОГИЧЕСКОМУ ИМЕНИ ======
 async def call_service(
     service_name: str, path: str, method="GET", json=None, params=None
 ):
@@ -116,27 +113,17 @@ async def call_service(
     params: query params
     """
     async with httpx.AsyncClient() as client:
-        # Получаем живые инстансы из discovery
+
         resp = await client.get(f"{DISCOVERY_URL}/services/{service_name}")
         resp.raise_for_status()
         instances = resp.json()
         if not instances:
             raise Exception(f"No alive instances for service {service_name}")
 
-        # Берём первый (можно улучшить round-robin)
         instance = instances[0]
 
-        # Формируем полный URL
         url = f"http://{instance['host']}:{instance['port']}/{service_name}/{path}"
 
-        # Делаем запрос
         response = await client.request(method, url, json=json, params=params)
         response.raise_for_status()
         return response.json()
-
-
-# ====== ПРИМЕР ВЫЗОВА ДРУГОГО СЕРВИСА ======
-# Пример: получить пользователя из user_service
-# async def example():
-#     user = await call_service("users", "1")
-#     print(user)
