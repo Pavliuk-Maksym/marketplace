@@ -1,27 +1,28 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+import asyncio
+import httpx
 
 app = FastAPI()
 
-# --- 1. Опис структури даних (Pydantic Models) ---
 
-# Базова модель (те, що ми відправляємо при створенні)
+# ====== BUSINESS LOGIC (оставлено без изменений) ======
 class ProductBase(BaseModel):
-    ownerId: int          # ID користувача (власника)
-    title: str            # Назва товару
-    description: str      # Опис
-    price: float          # Ціна (number)
-    category: str         # Категорія (string у вашому описі Product)
-    status: str           # Наприклад: "available", "sold", "hidden"
-    quantity: int         # Кількість (number -> int)
-    imageUrl: str         # Посилання на фото
+    ownerId: int
+    title: str
+    description: str
+    price: float
+    category: str
+    status: str
+    quantity: int
+    imageUrl: str
 
-# Повна модель (те, що віддає база даних - з ID)
+
 class Product(ProductBase):
     id: int
 
-# --- 2. Імітація Бази Даних ---
+
 fake_products_db: List[Product] = [
     Product(
         id=1,
@@ -32,7 +33,7 @@ fake_products_db: List[Product] = [
         category="Одяг",
         status="active",
         quantity=5,
-        imageUrl="http://img.com/scarf.jpg"
+        imageUrl="http://img.com/scarf.jpg",
     ),
     Product(
         id=2,
@@ -43,20 +44,18 @@ fake_products_db: List[Product] = [
         category="Посуд",
         status="active",
         quantity=1,
-        imageUrl="http://img.com/cup.jpg"
-    )
+        imageUrl="http://img.com/cup.jpg",
+    ),
 ]
 
-# --- 3. API Endpoints ---
 
-# Отримати всі товари або товари конкретного юзера (ownerId)
 @app.get("/products", response_model=List[Product])
 def get_products(ownerId: Optional[int] = None):
     if ownerId:
         return [p for p in fake_products_db if p.ownerId == ownerId]
     return fake_products_db
 
-# Знайти товар за ID
+
 @app.get("/products/{product_id}", response_model=Product)
 def get_product(product_id: int):
     for product in fake_products_db:
@@ -64,16 +63,15 @@ def get_product(product_id: int):
             return product
     raise HTTPException(status_code=404, detail="Product not found")
 
-# Створити новий товар
+
 @app.post("/products", response_model=Product)
 def create_product(product: ProductBase):
     new_id = len(fake_products_db) + 1 if fake_products_db else 1
-    # Створюємо новий об'єкт Product, додаючи ID до отриманих даних
     new_product = Product(id=new_id, **product.dict())
     fake_products_db.append(new_product)
     return new_product
 
-# Оновити товар
+
 @app.put("/products/{product_id}", response_model=Product)
 def update_product(product_id: int, updated_data: ProductBase):
     for index, product in enumerate(fake_products_db):
@@ -83,7 +81,7 @@ def update_product(product_id: int, updated_data: ProductBase):
             return updated_product
     raise HTTPException(status_code=404, detail="Product not found")
 
-# Видалити товар
+
 @app.delete("/products/{product_id}")
 def delete_product(product_id: int):
     for index, product in enumerate(fake_products_db):
@@ -93,7 +91,59 @@ def delete_product(product_id: int):
     raise HTTPException(status_code=404, detail="Product not found")
 
 
-# --- Запуск сервера (щоб можна було запускати кнопкою Play у PyCharm) ---
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+# ====== DISCOVERY CONFIG ======
+SERVICE_NAME = "products"
+SERVICE_HOST = "localhost"
+SERVICE_PORT = 8001
+DISCOVERY_URL = "http://localhost:8000"
+
+
+# ====== REGISTRATION И HEARTBEAT ======
+async def register():
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{DISCOVERY_URL}/register",
+            params={"name": SERVICE_NAME, "host": SERVICE_HOST, "port": SERVICE_PORT},
+        )
+
+
+async def heartbeat():
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{DISCOVERY_URL}/heartbeat/{SERVICE_NAME}",
+                    params={"host": SERVICE_HOST, "port": SERVICE_PORT},
+                )
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
+
+@app.on_event("startup")
+async def startup():
+    await register()
+    asyncio.create_task(heartbeat())
+
+
+# ====== HEALTHCHECK ======
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ====== HELPER ДЛЯ ВЫЗОВА ДРУГИХ СЕРВИСОВ ПО ЛОГИЧЕСКОМУ ИМЕНИ ======
+async def call_service(
+    service_name: str, path: str, method="GET", json=None, params=None
+):
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{DISCOVERY_URL}/services/{service_name}")
+        resp.raise_for_status()
+        instances = resp.json()
+        if not instances:
+            raise Exception(f"No alive instances for service {service_name}")
+        instance = instances[0]
+        url = f"http://{instance['host']}:{instance['port']}/{service_name}/{path}"
+        response = await client.request(method, url, json=json, params=params)
+        response.raise_for_status()
+        return response.json()

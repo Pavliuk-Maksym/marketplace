@@ -1,47 +1,18 @@
 from fastapi import FastAPI, APIRouter
-import requests
+import asyncio
+import httpx
 
 app = FastAPI()
 router = APIRouter(prefix="/orders")
 
-# Test data
+# ====== BUSINESS LOGIC (оставлено без изменений) ======
 orders = [
-    {
-        "id": 1,
-        "buyerId": 1,
-        "productId": 1,
-        "status": "pending",
-    },
-    {
-        "id": 6,
-        "buyerId": 1,
-        "productId": 2,
-        "status": "pending",
-    },
-    {
-        "id": 2,
-        "buyerId": 2,
-        "productId": 2,
-        "status": "delivered",
-    },
-    {
-        "id": 3,
-        "buyerId": 3,
-        "productId": 3,
-        "status": "shipped",
-    },
-    {
-        "id": 4,
-        "buyerId": 4,
-        "productId": 4,
-        "status": "cancele",
-    },
-    {
-        "id": 5,
-        "buyerId": 5,
-        "productId": 5,
-        "status": "payed",
-    },
+    {"id": 1, "buyerId": 1, "productId": 1, "status": "pending"},
+    {"id": 6, "buyerId": 1, "productId": 2, "status": "pending"},
+    {"id": 2, "buyerId": 2, "productId": 2, "status": "delivered"},
+    {"id": 3, "buyerId": 3, "productId": 3, "status": "shipped"},
+    {"id": 4, "buyerId": 4, "productId": 4, "status": "cancele"},
+    {"id": 5, "buyerId": 5, "productId": 5, "status": "payed"},
 ]
 
 
@@ -62,16 +33,13 @@ def find_order_by_id(id: int):
 @router.post("")
 def create_order(order: dict):
     new_id = max([o["id"] for o in orders], default=0) + 1
-
     new_order = {
         "id": new_id,
         "buyerId": order.get("buyerId"),
         "productId": order.get("productId"),
         "status": "pending",
     }
-
     orders.append(new_order)
-
     return new_order
 
 
@@ -93,3 +61,82 @@ def cancel_order(id: int):
 
 
 app.include_router(router)
+
+# ====== DISCOVERY CONFIG ======
+SERVICE_NAME = "orders"
+SERVICE_HOST = "localhost"
+SERVICE_PORT = 8002
+DISCOVERY_URL = "http://localhost:8000"
+
+
+# ====== REGISTRATION И HEARTBEAT ======
+async def register():
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{DISCOVERY_URL}/register",
+            params={"name": SERVICE_NAME, "host": SERVICE_HOST, "port": SERVICE_PORT},
+        )
+
+
+async def heartbeat():
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{DISCOVERY_URL}/heartbeat/{SERVICE_NAME}",
+                    params={"host": SERVICE_HOST, "port": SERVICE_PORT},
+                )
+        except Exception:
+            pass
+        await asyncio.sleep(5)
+
+
+@app.on_event("startup")
+async def startup():
+    await register()
+    asyncio.create_task(heartbeat())
+
+
+# ====== HEALTHCHECK ======
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ====== HELPER ДЛЯ ВЫЗОВА ДРУГИХ СЕРВИСОВ ПО ЛОГИЧЕСКОМУ ИМЕНИ ======
+async def call_service(
+    service_name: str, path: str, method="GET", json=None, params=None
+):
+    """
+    Внутрисервисный вызов через Discovery.
+    service_name: логическое имя сервиса
+    path: путь запроса внутри сервиса (без ведущего /)
+    method: HTTP метод
+    json: тело запроса
+    params: query params
+    """
+    async with httpx.AsyncClient() as client:
+        # Получаем живые инстансы из discovery
+        resp = await client.get(f"{DISCOVERY_URL}/services/{service_name}")
+        resp.raise_for_status()
+        instances = resp.json()
+        if not instances:
+            raise Exception(f"No alive instances for service {service_name}")
+
+        # Берём первый (можно улучшить round-robin)
+        instance = instances[0]
+
+        # Формируем полный URL
+        url = f"http://{instance['host']}:{instance['port']}/{service_name}/{path}"
+
+        # Делаем запрос
+        response = await client.request(method, url, json=json, params=params)
+        response.raise_for_status()
+        return response.json()
+
+
+# ====== ПРИМЕР ВЫЗОВА ДРУГОГО СЕРВИСА ======
+# Пример: получить пользователя из user_service
+# async def example():
+#     user = await call_service("users", "1")
+#     print(user)
