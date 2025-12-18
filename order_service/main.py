@@ -104,14 +104,6 @@ def health():
 async def call_service(
     service_name: str, path: str, method="GET", json=None, params=None
 ):
-    """
-    Внутрисервисный вызов через Discovery.
-    service_name: логическое имя сервиса
-    path: путь запроса внутри сервиса (без ведущего /)
-    method: HTTP метод
-    json: тело запроса
-    params: query params
-    """
     async with httpx.AsyncClient() as client:
 
         resp = await client.get(f"{DISCOVERY_URL}/services/{service_name}")
