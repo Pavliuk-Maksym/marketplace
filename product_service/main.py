@@ -15,7 +15,6 @@ class ProductBase(BaseModel):
     category: str
     status: str
     quantity: int
-    imageUrl: str
 
 
 class Product(ProductBase):
@@ -32,7 +31,6 @@ fake_products_db: List[Product] = [
         category="Одяг",
         status="active",
         quantity=5,
-        imageUrl="http://img.com/scarf.jpg",
     ),
     Product(
         id=2,
@@ -43,7 +41,6 @@ fake_products_db: List[Product] = [
         category="Посуд",
         status="active",
         quantity=1,
-        imageUrl="http://img.com/cup.jpg",
     ),
 ]
 
