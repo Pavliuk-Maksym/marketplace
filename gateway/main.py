@@ -1,9 +1,21 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import itertools
 
 app = FastAPI()
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 DISCOVERY_URL = "http://localhost:8000"
 rr_counters = {}
 
