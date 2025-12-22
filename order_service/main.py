@@ -1,6 +1,9 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
+import requests
 import asyncio
 import httpx
+
+GATEWAY_URL = "http://127.0.0.1:8080"
 
 app = FastAPI()
 router = APIRouter(prefix="/orders")
@@ -32,13 +35,29 @@ def find_order_by_id(id: int):
 
 @router.post("")
 def create_order(order: dict):
+    buyer_id = order.get("buyerId")
+    product_id = order.get("productId")
+
+    if not buyer_id or not product_id:
+        raise HTTPException(status_code=400, detail="buyerId and productId required")
+
+    user_resp = requests.get(f"{GATEWAY_URL}/users/{buyer_id}")
+    if user_resp.status_code != 200:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    product_resp = requests.get(f"{GATEWAY_URL}/products/{product_id}")
+    if product_resp.status_code != 200:
+        raise HTTPException(status_code=404, detail="Product not found")
+
     new_id = max([o["id"] for o in orders], default=0) + 1
+
     new_order = {
         "id": new_id,
-        "buyerId": order.get("buyerId"),
-        "productId": order.get("productId"),
+        "buyerId": buyer_id,
+        "productId": product_id,
         "status": "pending",
     }
+
     orders.append(new_order)
     return new_order
 
